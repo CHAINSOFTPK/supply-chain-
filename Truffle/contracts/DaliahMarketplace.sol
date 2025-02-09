@@ -69,7 +69,7 @@ contract DaliahMarketplace {
     address _farmerAddress
   ) public {
     require(
-      !dist.hasProfile(),
+      dist.hasProfile(), // Removed the ! operator
       "You should have a profile in order to place an order"
     );
     // set order isCompleted to false by defualt,
@@ -127,7 +127,9 @@ contract DaliahMarketplace {
       "The requested Qty is less than the minimum ordering qty"
     );
 
-    return farmer.getHarvestData(_harvestID).pricePerKG * _qty * 1 ether;
+    uint256 pricePerKG = farmer.getHarvestData(_harvestID).pricePerKG;
+    uint256 totalPrice = pricePerKG * _qty;
+    return totalPrice; // Remove the * 1 ether since price is already in wei
   }
 
   function requestRefund(uint256 _orderID) public {

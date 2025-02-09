@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract JordanainDinarToken is ERC20, ERC20Burnable, Pausable, Ownable {
-  constructor() ERC20("Jordanain Dinar", "JODT") {
+  constructor() ERC20("Jordanain Dinar", "JODTS") {
     _mint(msg.sender, 1000 * 10**decimals());
   }
 

@@ -18,7 +18,7 @@ const { Text } = Typography;
 
 // Use contract addresses from JSON files
 const FarmerContractAddress = FarmerContract.networks["11155111"].address;
-const DistContractAddress = "0xe74f3FF590d09AC2Ae53851F2A5D19BF0Fe77035";
+const DistContractAddress = "0xf26CeEe62C957209d5146De0a7C21BC9AA68bDf5";
 const MarketplaceContractAddress = MarketplaceContract.networks["11155111"]?.address;
 
 // Add wallet connectors configuration

@@ -16,7 +16,7 @@ module.exports = async function (deployer) {
 
   await tokenInastance.mint(
     "0xB6C8325bD553893E4B3dF330BC520Fe619B1a929",
-    web3.utils.toWei("5000", "ether"),
+    web3.utils.toWei("50000", "ether"),
   );
 
   await deployer.deploy(
