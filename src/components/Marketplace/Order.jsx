@@ -357,25 +357,22 @@ const fetchOrderData = async (orderID = order_id) => {
       paymentStatus: paymentData[3] || 'UNKNOWN',
       isRefundRequested: orderData.isRefundRequested || false,
       isRefundApproved: orderData.isRefundApproved || false,
-      carrierAddress: orderData.carrierAddress || ethers.constants.AddressZero,
       
-      // Additional fields
-      carrier: {
-        carrierName: orderData.carrier?.carrierName || '',
-        carPlateNumber: safeBigNumber(orderData.carPlateNumber).toNumber(),
-        vehicleTemp: safeBigNumber(orderData.vehicleTemp).toNumber(),
-        vehicleTempImage: orderData.vehicleTempImage || '',
-        pickupDate: orderData.pickupDate || null,
-        deliveredAt: orderData.deliveredAt || null
-      },
-      distributorAddress: orderData.distributorAddress, // Add this line
+      // Carrier related fields - consolidated to avoid duplicates
+      carrierAddress: orderData.carrierAddress || ethers.constants.AddressZero,
       carrierName: orderData.carrier?.carrierName || '',
-      carPlateNumber: orderData.carrier?.carPlateNumber ? 
-        orderData.carrier.carPlateNumber.toNumber() : 0,
-      vehicleTemp: orderData.carrier?.vehicleTemp ? 
-        orderData.carrier.vehicleTemp.toNumber() : 0,
+      carPlateNumber: safeNumberConversion(orderData.carrier?.carPlateNumber),
+      vehicleTemp: safeNumberConversion(orderData.carrier?.vehicleTemp),
       vehicleTempImage: orderData.carrier?.vehicleTempImage ? 
         `https://gateway.pinata.cloud/ipfs/${orderData.carrier.vehicleTempImage}` : '',
+      pickupDate: orderData.carrier?.pickupDate ? 
+        new Date(orderData.carrier.pickupDate.toNumber() * 1000).toLocaleString() : null,
+      deliveredAt: orderData.carrier?.deliveredAt ? 
+        new Date(orderData.carrier.deliveredAt.toNumber() * 1000).toLocaleString() : null,
+      
+      // Additional metadata
+      distributorAddress: orderData.distributorAddress,
+      carrier: orderData.carrier || {} // Keep carrier object for reference if needed
     };
 
     // Try to get harvest data
@@ -901,14 +898,7 @@ const fetchOrderData = async (orderID = order_id) => {
                     <b>Pickup Time:</b>{" "}
                     {responses.pickupDate ? (
                       <>
-                        {responses.pickupDate}{" "}
-                        <a
-                          href={responses.pickupDateImage}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          (Proof Image)
-                        </a>
+                        {responses.pickupDate}
                       </>
                     ) : (
                       <Tag icon={<SyncOutlined spin />} color="processing">
@@ -918,16 +908,9 @@ const fetchOrderData = async (orderID = order_id) => {
                   </h3>
                   <h3>
                     <b>Delivered At:</b>{" "}
-                    {responses.deliveredAt && responses.deliveredAt !== "1/1/1970, 5:00:00 AM" ? (
+                    {responses.deliveredAt ? (
                       <>
-                        {responses.deliveredAt}{" "}
-                        <a
-                          href={responses.deliveredAtImage}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          (Proof Image)
-                        </a>
+                        {responses.deliveredAt}
                       </>
                     ) : (
                       <Tag icon={<SyncOutlined spin />} color="processing">
