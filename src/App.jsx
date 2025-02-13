@@ -9,7 +9,6 @@ import {
 import Account from "components/Account/Account";
 import Chains from "components/Chains";
 import Wallet from "components/Wallet";
-import TestOrder from "components/Marketplace/TestOrder"
 import { Layout } from "antd";
 import "./style.css";
 import "antd/dist/antd.min.css";
@@ -73,6 +72,8 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [account, setAccount] = useState(null);
   const [provider, setProvider] = useState(null);
+  // Add roleType state
+  const [localRoleType, setRoleType] = useState(null);
 
   useEffect(() => {
     const initProvider = async () => {
@@ -93,14 +94,14 @@ const App = () => {
   return (
     <Layout style={{ height: "100vh", overflow: "auto" }}>
       <Router>
-        <Header roleType={roleType} style={styles.header}>
+        <Header roleType={roleType || localRoleType} style={styles.header}>
           <Logo />
           {/* Only render MenuItems here, remove it from Account component */}
-          <MenuItems roleType={roleType} />
+          <MenuItems roleType={roleType || localRoleType} />
           <div style={styles.headerRight}>
             <Chains />
-            {roleType && roleType.toUpperCase()}
-            <Account setRoleType={(role) => setRoleType(role)} />
+            {(roleType || localRoleType) && (roleType || localRoleType).toUpperCase()}
+            <Account setRoleType={setRoleType} />
           </div>
         </Header>
 
@@ -129,9 +130,6 @@ const App = () => {
             </Route>
             <Route path="/farmer/orders">
               <ViewOrdersByFarmer />
-            </Route>
-            <Route path="/test-order">
-              <TestOrder />
             </Route>
             <Route path="/farmer/order/:order_id">
               <ViewOrderByFarmer />

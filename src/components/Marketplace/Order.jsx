@@ -67,23 +67,12 @@ const safeToNumber = (value) => {
 const initializeContracts = async (provider, chainId) => {
   try {
     const signer = provider.getSigner();
-    return {
-      marketplace: new ethers.Contract(
-        DaliahMarketplace.networks[chainId].address,
-        DaliahMarketplace.abi,
-        signer
-      ),
-      farmer: new ethers.Contract(
-        FarmerContract.networks[chainId].address,
-        FarmerContract.abi,
-        signer
-      ),
-      distributor: new ethers.Contract(
-        Distributor.networks[chainId]?.address || "0xYourDeployedDistributorAddress",
-        Distributor.abi,
-        signer
-      )
-    };
+    const marketplace = new ethers.Contract(
+      DaliahMarketplace.networks[chainId].address,
+      DaliahMarketplace.abi,
+      signer
+    );
+    return { marketplace };
   } catch (error) {
     console.error("Error initializing contracts:", error);
     return null;
@@ -93,15 +82,16 @@ const initializeContracts = async (provider, chainId) => {
 // Add these helper functions at the top
 const formatTimestamp = (timestamp) => {
   try {
-    if (!timestamp) return 'Not set';
+    if (!timestamp || timestamp.toNumber() === 0) return null;
     const date = new Date(timestamp.toNumber() * 1000);
-    if (date.getTime() === 0 || isNaN(date.getTime())) {
-      return 'Not set';
+    // Check if date is epoch (1970) or invalid
+    if (date.getFullYear() <= 1970 || isNaN(date.getTime())) {
+      return null;
     }
-    return date.toLocaleString(); // Return string instead of Date object
+    return date.toLocaleString();
   } catch (error) {
     console.warn('Error formatting timestamp:', error);
-    return 'Not set';
+    return null;
   }
 };
 
@@ -124,6 +114,17 @@ const debugData = (label, data) => {
     type: typeof data,
     value: data
   });
+};
+
+// Add this helper function for safe BigNumber conversion
+const safeBigNumber = (value) => {
+  try {
+    if (!value) return ethers.BigNumber.from(0);
+    return ethers.BigNumber.isBigNumber(value) ? value : ethers.BigNumber.from(value);
+  } catch (error) {
+    console.warn('Error converting to BigNumber:', error);
+    return ethers.BigNumber.from(0);
+  }
 };
 
 export default function Order() {
@@ -300,132 +301,110 @@ export default function Order() {
     }
   };
 
-  // Update the fetchOrderData function
-  const fetchOrderData = async (orderID = order_id) => {
-    try {
-      if (!provider || !chainId || !contractAddress) {
-        throw new Error("Web3 not initialized");
-      }
-
-      const contracts = await initializeContracts(provider, chainId);
-      if (!contracts) {
-        throw new Error("Failed to initialize contracts");
-      }
-
-      // Get order data with error handling
-      const orderData = await contracts.marketplace.ordersMapping(order_id);
-      if (!orderData?.productID) {
-        throw new Error("Order not found");
-      }
-
-      // Get payment and damages data
-      const [paymentData, damages] = await Promise.all([
-        contracts.marketplace.getOrderPaymentDeatils(order_id),
-        contracts.marketplace.getDamages(order_id)
-      ]);
-
-      // Format damages safely
-      const formattedDamages = Array.isArray(damages) ? damages.map((damage, index) => ({
-        case: index,
-        description: damage[0] || '',
-        image: damage[1] ? `https://gateway.pinata.cloud/ipfs/${damage[1]}` : ''
-      })) : [];
-      
-      setDamagesData(formattedDamages);
-
-      try {
-        const harvestData = await contracts.farmer.harvestMapping(orderData.productID);
-        console.log("Raw harvest data:", harvestData);
-    
-        // Debug timestamps
-        debugData('Harvest Capture Date', harvestData.harvestCaptureDate);
-        debugData('Expiry Date', harvestData.expiryDate);
-        
-        if (!harvestData) {
-          throw new Error("Invalid harvest data");
-        }
-
-        // Safely get product name
-        const productName = await getHarvestType(
-          contracts.farmer, 
-          harvestData.catalogueProductID || ethers.BigNumber.from(0),
-          harvestData.farmerAddress || ethers.constants.AddressZero
-        );
-
-        // Format order data with safe conversions
-        const formattedOrder = {
-          harvestID: safeNumberConversion(orderData.productID),
-          productName,
-          qty: safeNumberConversion(orderData.quantity),
-          pricePerKG: formatPrice(orderData.pricePerKG),
-          totalAmount: formatPrice(paymentData[2]),
-          orderStatus: safeNumberConversion(orderData.isAccepted),
-          paymentStatus: paymentData[3] || 'UNKNOWN',
-          isRefundRequested: orderData.isRefundRequested || false,
-          isRefundApproved: orderData.isRefundApproved || false,
-          carrierAddress: orderData.carrierAddress || ethers.constants.AddressZero,
-          farmerAddress: harvestData.farmerAddress,  // Store the actual farmer address
-          harvestPhotoUrl: harvestData.photoHash ? 
-            `https://gateway.pinata.cloud/ipfs/${harvestData.photoHash}` : '',
-          harvestCaptureDate: new Date(parseInt(harvestData.harvestCaptureDate.toString()) * 1000),
-          expiryDate: new Date(parseInt(harvestData.expiryDate.toString()) * 1000),
-          
-          // Carrier details with safe access
-          carrierName: orderData.carrier?.carrierName || '',
-          carPlateNumber: safeNumberConversion(orderData.carrier?.carPlateNumber),
-          vehicleTemp: safeNumberConversion(orderData.carrier?.vehicleTemp),
-          vehicleTempImage: orderData.carrier?.vehicleTempImage ? 
-            `https://gateway.pinata.cloud/ipfs/${orderData.carrier.vehicleTempImage}` : '',
-          pickupDate: orderData.carrier?.pickupDate ? formatTimestamp(orderData.carrier.pickupDate) : null,
-          deliveredAt: orderData.carrier?.deliveredAt ? formatTimestamp(orderData.carrier.deliveredAt) : null
-        };
-
-        // Inside fetchOrderData (or similar), map pickupDateImage & deliveredAtImage:
-        if (orderData.carrier.pickupDateImage) {
-          formattedOrder.pickupDateImage = 
-            `https://gateway.pinata.cloud/ipfs/${orderData.carrier.pickupDateImage}`;
-        }
-        if (orderData.carrier.deliveredAtImage) {
-          formattedOrder.deliveredAtImage = 
-            `https://gateway.pinata.cloud/ipfs/${orderData.carrier.deliveredAtImage}`;
-        }
-
-        // Log formatted data
-        console.log("Formatted order:", {
-          farmerAddress: formattedOrder.farmerAddress,
-          harvestCaptureDate: formattedOrder.harvestCaptureDate.toLocaleString(),
-          expiryDate: formattedOrder.expiryDate.toLocaleString()
-        });
-
-        setResponses(formattedOrder);
-
-      } catch (error) {
-        console.error("Error fetching farmer data:", error);
-        notification.warning({
-          message: "Warning",
-          description: "Could not load all order details"
-        });
-        
-        // Set minimal order data even if farmer data fails
-        setResponses({
-          harvestID: safeNumberConversion(orderData.productID),
-          qty: safeNumberConversion(orderData.quantity),
-          orderStatus: safeNumberConversion(orderData.isAccepted),
-          carrierAddress: orderData.carrierAddress || ethers.constants.AddressZero,
-          productName: 'Unknown Product'
-        });
-      }
-
-    } catch (error) {
-      console.error("Error fetching order:", error);
-      notification.error({
-        message: "Error",
-        description: error.message || "Failed to fetch order data"
-      });
-    } finally {
-      setLoading(false);
+  // Update the fetchOrderData function to properly load order details
+const fetchOrderData = async (orderID = order_id) => {
+  try {
+    if (!provider || !chainId || !contractAddress) {
+      throw new Error("Web3 not initialized");
     }
-  };
+
+    const signer = provider.getSigner();
+    
+    // Initialize contracts
+    const marketplace = new ethers.Contract(
+      DaliahMarketplace.networks[chainId].address,
+      DaliahMarketplace.abi,
+      signer
+    );
+
+    const farmer = new ethers.Contract(
+      FarmerContract.networks[chainId].address,
+      FarmerContract.abi,
+      signer
+    );
+
+    // Get order data with safety checks
+    const orderData = await marketplace.ordersMapping(orderID);
+    console.log("Raw order data:", orderData);
+    
+    if (!orderData || !orderData.productID) {
+      throw new Error("Order not found");
+    }
+
+    // Safely get related data
+    const [paymentData, damages] = await Promise.all([
+      marketplace.getOrderPaymentDeatils(orderID).catch(() => [0, 0, 0, 'UNKNOWN']),
+      marketplace.getDamages(orderID).catch(() => [])
+    ]);
+
+    // Format damages safely
+    const formattedDamages = Array.isArray(damages) ? damages.map((damage, index) => ({
+      case: index,
+      description: damage[0] || '',
+      image: damage[1] ? `https://gateway.pinata.cloud/ipfs/${damage[1]}` : ''
+    })) : [];
+    
+    setDamagesData(formattedDamages);
+
+    // Format order data with safe conversions
+    const formattedOrder = {
+      harvestID: safeBigNumber(orderData.productID).toNumber(),
+      customerAddress: orderData.customerAddress || ethers.constants.AddressZero,
+      qty: safeBigNumber(orderData.quantity).toNumber(),
+      pricePerKG: ethers.utils.formatUnits(safeBigNumber(orderData.pricePerKG), 12),
+      totalAmount: ethers.utils.formatUnits(safeBigNumber(paymentData[2]), 12),
+      orderStatus: safeBigNumber(orderData.isAccepted).toNumber(),
+      paymentStatus: paymentData[3] || 'UNKNOWN',
+      isRefundRequested: orderData.isRefundRequested || false,
+      isRefundApproved: orderData.isRefundApproved || false,
+      carrierAddress: orderData.carrierAddress || ethers.constants.AddressZero,
+      
+      // Additional fields
+      carrier: {
+        carrierName: orderData.carrier?.carrierName || '',
+        carPlateNumber: safeBigNumber(orderData.carPlateNumber).toNumber(),
+        vehicleTemp: safeBigNumber(orderData.vehicleTemp).toNumber(),
+        vehicleTempImage: orderData.vehicleTempImage || '',
+        pickupDate: orderData.pickupDate || null,
+        deliveredAt: orderData.deliveredAt || null
+      },
+      distributorAddress: orderData.distributorAddress, // Add this line
+      carrierName: orderData.carrier?.carrierName || '',
+      carPlateNumber: orderData.carrier?.carPlateNumber ? 
+        orderData.carrier.carPlateNumber.toNumber() : 0,
+      vehicleTemp: orderData.carrier?.vehicleTemp ? 
+        orderData.carrier.vehicleTemp.toNumber() : 0,
+      vehicleTempImage: orderData.carrier?.vehicleTempImage ? 
+        `https://gateway.pinata.cloud/ipfs/${orderData.carrier.vehicleTempImage}` : '',
+    };
+
+    // Try to get harvest data
+    try {
+      const harvestData = await farmer.harvestMapping(orderData.productID);
+      if (harvestData) {
+        formattedOrder.farmerAddress = harvestData.farmerAddress;
+        formattedOrder.harvestPhotoUrl = harvestData.photoHash ? 
+          `https://gateway.pinata.cloud/ipfs/${harvestData.photoHash}` : '';
+        formattedOrder.harvestCaptureDate = new Date(safeBigNumber(harvestData.harvestCaptureDate).toNumber() * 1000);
+        formattedOrder.expiryDate = new Date(safeBigNumber(harvestData.expiryDate).toNumber() * 1000);
+      }
+    } catch (error) {
+      console.warn("Could not load harvest data:", error);
+    }
+
+    console.log("Formatted order:", formattedOrder);
+    setResponses(formattedOrder);
+
+  } catch (error) {
+    console.error("Error in fetchOrderData:", error);
+    notification.error({
+      message: "Error",
+      description: error.message || "Failed to load order details"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Add this helper function to safely get harvest type
   const getHarvestType = async (farmerContract, catalogueProductID, farmerAddress) => {
@@ -544,6 +523,95 @@ export default function Order() {
       });
     }
   }, [responses]);
+
+  // Add these contract interaction functions before the return statement
+  const inviteCarrier = async () => {
+    if (!carrierAddress) {
+      notification.error({
+        message: "Error",
+        description: "Please input a carrier address!"
+      });
+      return;
+    }
+  
+    try {
+      const signer = provider.getSigner();
+      const marketplace = new ethers.Contract(
+        DaliahMarketplace.networks[chainId].address,
+        DaliahMarketplace.abi,
+        signer
+      );
+  
+      // Get order data to verify ownership
+      const orderData = await marketplace.ordersMapping(order_id);
+      
+      // Verify order owner
+      if (orderData.distributorAddress?.toLowerCase() !== account?.toLowerCase()) {
+        throw new Error("Only the order owner can invite carriers");
+      }
+  
+      // Validate carrier address
+      if (!ethers.utils.isAddress(carrierAddress)) {
+        throw new Error("Invalid carrier address");
+      }
+  
+      // Check if carrier already assigned
+      if (orderData.carrierAddress !== ethers.constants.AddressZero) {
+        throw new Error("A carrier has already been assigned");
+      }
+  
+      // Format parameters like Moralis example
+      let params = {
+        _orderID: order_id,
+        _carrierAdress: carrierAddress
+      };
+  
+      // Submit transaction
+      const tx = await marketplace.inviteCarrier(params._orderID, params._carrierAdress);
+      
+      notification.info({
+        message: "Transaction Pending",
+        description: `TX: ${tx.hash}`
+      });
+  
+      await tx.wait();
+  
+      notification.success({
+        message: "Success",
+        description: "Carrier has been assigned successfully!"
+      });
+  
+      setIsModalVisible(false);
+      await fetchOrderData(); // Refresh data
+  
+    } catch (error) {
+      console.error("Error inviting carrier:", error);
+      notification.error({
+        message: "Error",
+        description: error.data?.message || error.message
+      });
+    }
+  };
+  
+  const setOrderCompleted = async () => {
+    await orderActions.setOrderCompleted();
+    fetchOrderData();
+  };
+  
+  const requestRefund = async () => {
+    await orderActions.requestRefund();
+    fetchOrderData();
+  };
+  
+  const withdrawRefund = async () => {
+    await orderActions.withdrawRefund();
+    fetchOrderData();
+  };
+  
+  const cancelOrder = async () => {
+    await orderActions.cancelOrder();
+    fetchOrderData();
+  };
 
   return (
     <div>
@@ -850,7 +918,7 @@ export default function Order() {
                   </h3>
                   <h3>
                     <b>Delivered At:</b>{" "}
-                    {responses.deliveredAt ? (
+                    {responses.deliveredAt && responses.deliveredAt !== "1/1/1970, 5:00:00 AM" ? (
                       <>
                         {responses.deliveredAt}{" "}
                         <a
@@ -1005,9 +1073,9 @@ export default function Order() {
                       disabled={
                         responses.isCancelled ||
                         responses.isRefundApproved ||
-                        responses.paymentStatus !== "APPROVED_BY_CUSTOMER"
-                          ? true
-                          : ""
+                        responses.paymentStatus === "COMPLETED" || // Add this condition
+                        !responses.deliveredAt || // Add this condition
+                        responses.paymentStatus !== "PAID" // Change this condition
                       }
                     >
                       Mark As Completed
