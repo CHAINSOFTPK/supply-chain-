@@ -268,88 +268,100 @@ const Marketplace = () => {
     }
   };
 
-  const placeOrder = async (params) => {
-    try {
-      if (!params._quantity || params._quantity < currentOrder.minOrderQty) {
-        notification.error({
-          message: "Invalid Quantity",
-          description: `Minimum order quantity is ${currentOrder.minOrderQty} KG`
-        });
-        return;
-      }
-
-      setLoading(true);
-      const signer = provider.getSigner();
-
-      // Calculate total amount including fees (product cost + marketplace fee)
-      const productCost = params._quantity * parseFloat(currentOrder.pricePerKG);
-      const marketplaceFee = 25; // Fixed 25 JOD fee
-      const totalAmount = ethers.utils.parseEther((productCost + marketplaceFee).toString());
-
-      try {
-        const tokenContract = new ethers.Contract(
-          JordanainDinarToken.networks[provider.network.chainId].address,
-          JordanainDinarToken.abi,
-          signer
-        );
-
-        const marketplaceContract = new ethers.Contract(
-          DaliahMarketplace.networks[provider.network.chainId].address,
-          DaliahMarketplace.abi,
-          signer
-        );
-
-        // Single approval for the total amount (product cost + fee)
-        notification.info({
-          message: "Approving Payment",
-          description: `Approving ${formatter.format(productCost + marketplaceFee)} (includes ${formatter.format(marketplaceFee)} marketplace fee)`
-        });
-
-        const approveTx = await tokenContract.approve(
-          DaliahMarketplace.networks[provider.network.chainId].address,
-          totalAmount
-        );
-        await approveTx.wait();
-
-        notification.info({
-          message: "Placing Order",
-          description: "Please confirm the transaction"
-        });
-
-        // Place order with the full amount
-        const orderTx = await marketplaceContract.placeOrder(
-          params._quantity,
-          params._productID,
-          params._farmerAddress,
-          { value: 0 } // No ETH value needed since we're using tokens
-        );
-
-        await orderTx.wait();
-
-        notification.success({
-          message: "Success",
-          description: "Order placed successfully!"
-        });
-        
-        setOrderResponse(true);
-
-      } catch (error) {
-        console.error("Transaction failed:", error);
-        notification.error({
-          message: "Transaction Failed",
-          description: error.data?.message || error.message || "Failed to process order"
-        });
-      }
-    } catch (error) {
-      console.error("Order placement failed:", error);
+const placeOrder = async (params) => {
+  try {
+    if (!params._quantity || params._quantity < currentOrder.minOrderQty) {
       notification.error({
-        message: "Error",
-        description: "Failed to place order"
+        message: "Invalid Quantity",
+        description: `Minimum order quantity is ${currentOrder.minOrderQty} KG`
       });
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    setLoading(true);
+    const signer = provider.getSigner();
+
+    // First get the marketplace contract
+    const marketplaceContract = new ethers.Contract(
+      DaliahMarketplace.networks[provider.network.chainId].address,
+      DaliahMarketplace.abi,
+      signer
+    );
+
+    // Get total price from contract
+    const productTotal = await marketplaceContract.getOrderTotalPrice(
+      params._productID,
+      params._quantity
+    );
+
+    // Add fee of 25 JOD (in wei) to the computed total
+    const marketplaceFee = ethers.utils.parseEther('25');
+    const totalAmount = productTotal.add(marketplaceFee);
+
+    console.log('Total Amount needed:', ethers.utils.formatEther(totalAmount), 'JOD');
+
+    // Get token contract instance
+    const tokenContract = new ethers.Contract(
+      JordanainDinarToken.networks[provider.network.chainId].address,
+      JordanainDinarToken.abi,
+      signer
+    );
+
+    // Compute total approval amount
+    const totalApproval = totalAmount;
+    console.log("Approving tokens (wei):", totalApproval.toString());
+    console.log("Approving tokens (formatted):", ethers.utils.formatEther(totalApproval));
+
+    // Approve for marketplace contract
+    const approveTx1 = await tokenContract.approve(
+      DaliahMarketplace.networks[provider.network.chainId].address,
+      totalApproval
+    );
+    await approveTx1.wait();
+
+    // Also approve for the escrow/ additional contract
+    const additionalApprovalAddress = "0x7220DCb301c2ADCeEb01bA6ada4A567838A6B195";
+    console.log("Approving tokens for additional contract:", additionalApprovalAddress);
+    const approveTx2 = await tokenContract.approve(
+      additionalApprovalAddress,
+      totalApproval
+    );
+    await approveTx2.wait();
+
+    // Now place the order
+    notification.info({
+      message: "Placing Order",
+      description: "Please confirm the transaction"
+    });
+
+    const orderTx = await marketplaceContract.placeOrder(
+      params._productID,
+      params._quantity,
+      params._farmerAddress,
+      { 
+        gasLimit: 500000 // Add manual gas limit for order placement
+      }
+    );
+
+    await orderTx.wait();
+
+    notification.success({
+      message: "Success",
+      description: "Order placed successfully!"
+    });
+    
+    setOrderResponse(true);
+
+  } catch (error) {
+    console.error("Transaction failed:", error);
+    notification.error({
+      message: "Transaction Failed",
+      description: error.data?.message || error.message || "Failed to process order"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Update the quantity change handler
   const handleQuantityChange = (value) => {

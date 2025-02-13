@@ -9,6 +9,7 @@ import {
 import Account from "components/Account/Account";
 import Chains from "components/Chains";
 import Wallet from "components/Wallet";
+import TestOrder from "components/Marketplace/TestOrder"
 import { Layout } from "antd";
 import "./style.css";
 import "antd/dist/antd.min.css";
@@ -18,7 +19,7 @@ import Text from "antd/lib/typography/Text";
 import MenuItems from "./components/MenuItems";
 import RegisterHarvest from "components/Farmer/registerHarvest";
 import RegisterCatalogue from "components/Farmer/RegisterCatalogue";
-import Marketplace from "components/Marketplace";
+import Marketplace from "components/Marketplace/Marketplace";
 import ManageOrders from "components/Marketplace/ManageOrders";
 import ViewOrdersByFarmer from "components/Farmer/ViewOrdersByFarmer";
 import ViewOrderByFarmer from "components/Farmer/ViewOrderByFarmer";
@@ -128,6 +129,9 @@ const App = () => {
             </Route>
             <Route path="/farmer/orders">
               <ViewOrdersByFarmer />
+            </Route>
+            <Route path="/test-order">
+              <TestOrder />
             </Route>
             <Route path="/farmer/order/:order_id">
               <ViewOrderByFarmer />

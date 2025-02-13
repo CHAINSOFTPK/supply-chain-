@@ -69,7 +69,7 @@ contract DaliahMarketplace {
     address _farmerAddress
   ) public {
     require(
-      !dist.hasProfile(),
+      dist.hasProfile(),  // Fixed negation
       "You should have a profile in order to place an order"
     );
     // set order isCompleted to false by defualt,

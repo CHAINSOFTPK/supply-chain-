@@ -159,7 +159,7 @@ export default function RegisterHarvest() {
         Math.floor(values._waterLevel * 1000),  // 6th: water level
         values._quantity,  // 7th: quantity
         values._minOrderQty,  // 8th: min order qty
-        ethers.utils.parseUnits(values._pricePerKG.toString(), 18),  // 9th: price per kg
+        values._pricePerKG,  // 9th: price per kg
         Math.floor(new Date(values._expiryDate).getTime() / 1000)  // 10th: expiry date
       );
 
